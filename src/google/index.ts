@@ -15,7 +15,6 @@ const GOOGLE_ADMIN_EMAIL = process.env.GOOGLE_ADMIN_EMAIL
 const GOOGLE_TARGET_SA_FILE = GOOGLE_SA_KEY_FILE || "/tmp/service_account.json"
 
 async function resolveGoogleServiceAcccount() {
-
   if (process.env.GOOGLE_SA_KEY_SECRET !== undefined) {
     const secret = await getSecretFromAws(process.env.GOOGLE_SA_KEY_SECRET)
     await Bun.write(GOOGLE_TARGET_SA_FILE, secret)
@@ -28,8 +27,13 @@ async function resolveGoogleServiceAcccount() {
   }
 
   if (process.env.GOOGLE_SA_KEY_FILE !== undefined) {
+    const f = Bun.file(process.env.GOOGLE_SA_KEY_FILE)
+    if (!f.exists()) {
+      throw Error(`Google service account file does not exist: ${process.env.GOOGLE_SA_KEY_FILE}`)
+    }
     return
   }
+
   throw Error(`Google Service Account was not provided`)
 }
 

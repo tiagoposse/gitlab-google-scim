@@ -13,7 +13,12 @@ async function resolveGitlabScimToken(): Promise<string> {
   }
 
   if (process.env.GITLAB_SCIM_TOKEN_FILE !== undefined) {
-    return await Bun.file(process.env.GITLAB_SCIM_TOKEN_FILE).text()
+    const f = Bun.file(process.env.GITLAB_SCIM_TOKEN_FILE)
+
+    if (!f.exists()) {
+      throw Error(`Gitlab SCIM token file does not exist: ${process.env.GITLAB_SCIM_TOKEN_FILE}`)
+    }
+    return await f.text()
   }
 
   if (process.env.GITLAB_SCIM_TOKEN !== undefined) {

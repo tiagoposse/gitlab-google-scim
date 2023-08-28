@@ -1,6 +1,7 @@
-import { GitlabRoleMapping } from '../gitlab/types';
+import { GitlabRole, GitlabRoleMapping } from '../gitlab/types';
 import { load } from "js-yaml";
 import { getSecretFromAws } from './aws';
+import { logger } from './logging';
 
 async function resolveMappings(): Promise<string> {
   if (process.env.ROLE_MAPPINGS_SECRET !== undefined) {
@@ -8,7 +9,11 @@ async function resolveMappings(): Promise<string> {
   }
 
   if (process.env.ROLE_MAPPINGS_FILE !== undefined) {
-    return await Bun.file(process.env.ROLE_MAPPINGS_FILE).text()
+    const f = Bun.file(process.env.ROLE_MAPPINGS_FILE)
+    if (!f.exists()) {
+      throw Error(`Role mappings file does not exist: ${process.env.ROLE_MAPPINGS_FILE}`)
+    }
+    return await f.text()
   }
 
   if (process.env.ROLE_MAPPINGS !== undefined) {
@@ -53,5 +58,46 @@ export async function loadMappings(): Promise<PrivilegeMap> {
   const mappings = load(content, { json: true }) as PrivilegeMap
   validateMappings(mappings)
 
+  logger.debug("Mappings:")
+  logger.debug(JSON.stringify(mappings))
   return mappings
+}
+
+export function getGroupPrivilege(defaultRole: GitlabRole, gitlabGroup: string, membership: { [key: string]: GitlabRole }): GitlabRole {
+  const parts = gitlabGroup.split("/")
+  let level = defaultRole
+
+  for (var index = parts.length; index > 0; index--) {
+    const path = parts.slice(0, index).join("/")
+
+    if (membership[path] !== undefined && membership[path] > level) {
+      level = membership[path]
+    }
+  }
+
+  return level
+}
+
+export function getUserCustomMembership(email: string, groups: string[], mappings: PrivilegeMap): { [key: string]: GitlabRole } {
+  logger.debug(`retrieve membership of user ${email}`)
+
+  const membership: { [key: string]: GitlabRole } = {}
+
+  if (mappings.users[email] !== undefined) {
+    Object.keys(mappings.users[email]).forEach(gitlabGroup => {
+      membership[gitlabGroup] = GitlabRoleMapping[mappings.users[email][gitlabGroup]]
+    })
+  } else {
+    for (const userGroup of groups) {
+      if (mappings.groups.hasOwnProperty(userGroup)) {
+        for (const gitlabGroup of Object.keys(mappings.groups[userGroup])) {
+          if (!membership.hasOwnProperty(gitlabGroup) || membership[gitlabGroup] < GitlabRoleMapping[mappings.groups[userGroup][gitlabGroup]]) {
+            membership[gitlabGroup] = GitlabRoleMapping[mappings.groups[userGroup][gitlabGroup]]
+          }
+        }
+      }
+    }
+  }
+
+  return membership
 }

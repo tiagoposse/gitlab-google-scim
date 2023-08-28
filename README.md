@@ -1,16 +1,6 @@
 # Gitlab to Google SCIM
 
-To install dependencies:
-
-```bash
-bun install
-```
-
-To run:
-
-```bash
-bun run index.ts
-```
+Synchronizes your google users with gitlab users via SCIM. It supports mapping of different privileges for different groups & users.
 
 
 ## Configuration
@@ -18,7 +8,6 @@ bun run index.ts
 You need a few items of configuration. One side from Gitlab, and the other from Google Cloud to allow for API access to each.
 You will need the files produced by these steps for AWS Lambda deployment as well as locally running the sync tool.
 This how-to assumes you have Gitlab SSO configured and a Google SAML app to log in into Gitlab.
-
 
 ### Google
 
@@ -73,7 +62,24 @@ To get an API token, [create a Group Access Token](https://docs.gitlab.com/ee/us
 | GITLAB_API_TOKEN_SECRET | no | AWS Secret name to retrieve the API token from |
 | GITLAB_API_TOKEN_FILE | no | Filepath to retrieve the API token from |
 | GITLAB_API_TOKEN | no | API token |
+| DEFAULT_MEMBERSHIP_ROLE | no | Default gitlab role. Defaults to Minimal Access |
 | ROLE_MAPPINGS_SECRET | no | AWS Secret name to retrieve the gitlab role mappings from |
 | ROLE_MAPPINGS_FILE | no | Filepath to retrieve the gitlab role mappings from |
 | ROLE_MAPPINGS | no | Role mappings for gitlab |
 | SLACK_WEBHOOK_URL | no | Slack Webhook url to send notifications to |
+| LOG_LEVEL | no | Level of logs to print. Defaults to info |
+| DRY_RUN | no | Whether to only retrieve information, not create anything. Defaults to false |
+
+# Development
+
+To install dependencies:
+
+```bash
+bun install
+```
+
+To run:
+
+```bash
+bun run index.ts
+```

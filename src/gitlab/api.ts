@@ -10,7 +10,12 @@ async function resolveGitlabApiToken(): Promise<string> {
   }
 
   if (process.env.GITLAB_API_TOKEN_FILE !== undefined) {
-    return await Bun.file(process.env.GITLAB_API_TOKEN_FILE).text()
+    const f = Bun.file(process.env.GITLAB_API_TOKEN_FILE)
+
+    if (!f.exists()) {
+      throw Error(`Gitlab API token file does not exist: ${process.env.GITLAB_API_TOKEN_FILE}`)
+    }
+    return await f.text()
   }
 
   if (process.env.GITLAB_API_TOKEN !== undefined) {
@@ -87,8 +92,12 @@ export class GitlabApi extends Gitlab {
       }
 
       for (var user of (await resp.json()) as GitlabApiUser[]) {
-        if (user.group_saml_identity !== undefined) {
-          users[user.email!] = user
+        if (user.username.startsWith("group_")) {
+          continue
+        }
+
+        if (user.group_saml_identity !== null) {
+          users[user.group_saml_identity.extern_uid] = user
         }
       }
     }

@@ -1,5 +1,5 @@
 import { IncomingWebhook } from '@slack/webhook';
-import { GitlabAccessUpdate, GitlabAccessUpdateOperation, GitlabUserUpdate, GitlabUserUpdateOperation } from '../gitlab/types';
+import { GitlabAccessUpdate, GitlabAccessUpdateOperation, GitlabRole, GitlabRoleMapping, GitlabUserUpdate, GitlabUserUpdateOperation } from '../gitlab/types';
 import { logger } from './logging';
 
 // Read a url from the environment variables
@@ -7,13 +7,17 @@ const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
 
 export class Slack {
   private webhook: IncomingWebhook;
+  private roleMappingsNames: { [key: number]: string }
 
   constructor() {
     this.webhook = new IncomingWebhook(SLACK_WEBHOOK_URL!);
-  }
 
-  active() {
-    return !!SLACK_WEBHOOK_URL
+    const keys = Object.keys(GitlabRoleMapping)
+    const values = Object.values(GitlabRoleMapping)
+    this.roleMappingsNames = {}
+    for (let index = 0; index < keys.length; index++) {
+      this.roleMappingsNames[values[index]] = keys[index]
+    }
   }
 
   private computeUserUpdateNotification(changes: GitlabUserUpdate[]): any[] {
@@ -41,13 +45,13 @@ export class Slack {
     for (const change of changes) {
       switch (change.op) {
         case GitlabUserUpdateOperation.ADD:
-          addedUsers.push(change.user)
+          addedUsers.push(change.notes)
           break;
         case GitlabUserUpdateOperation.REMOVE:
-          removedUsers.push(change.user)
+          removedUsers.push(change.notes)
           break;
         case GitlabUserUpdateOperation.ACTIVATE:
-          activatedUsers.push(change.user)
+          activatedUsers.push(change.notes)
           break;
       }
     }
@@ -110,7 +114,7 @@ export class Slack {
             "type": "section",
             "text": {
               "type": "mrkdwn",
-              "text": `*${change.user}* granted ${change.role}\n`
+              "text": `*${change.notes}* granted ${this.roleMappingsNames[change.role]} on ${change.group}\n`
             }
           })
           break;
@@ -119,7 +123,7 @@ export class Slack {
             "type": "section",
             "text": {
               "type": "mrkdwn",
-              "text": `*${change.user}* revoked ${change.role}\n`
+              "text": `*${change.notes}* revoked ${this.roleMappingsNames[change.role]} on ${change.group}\n`
             }
           })
           break;
@@ -128,7 +132,7 @@ export class Slack {
             "type": "section",
             "text": {
               "type": "mrkdwn",
-              "text": `*${change.user}* moved to ${change.role}\n`
+              "text": `*${change.notes}* moved to ${this.roleMappingsNames[change.role]} on ${change.group}\n`
             }
           })
           break;
@@ -139,18 +143,20 @@ export class Slack {
   }
 
   async notify(users: GitlabUserUpdate[], memberships: GitlabAccessUpdate[]) {
-    if (!this.active()) {
-      return
-    }
-
     if (users.length === 0 && memberships.length === 0) {
       logger.debug("no changes, not slacking")
       return
     }
 
+
     await this.webhook.send({
-      text: 'Changes were done by Gitlab SSO Scim bridge:',
-      blocks: this.computeUserUpdateNotification(users).concat(...this.computeMembershipUpdateNotification(memberships))
+      blocks: [{
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": `Changes were done by Gitlab SSO Scim bridge at ${new Date().toDateString()}`
+        }
+      }].concat(...this.computeUserUpdateNotification(users), ...this.computeMembershipUpdateNotification(memberships))
     })
   }
 }

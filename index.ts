@@ -6,20 +6,24 @@ import { GitlabScim } from './src/gitlab/scim';
 import { GitlabApi } from './src/gitlab/api';
 import { Google } from './src/google';
 import { logger } from "./src/utils/logging";
-import { PrivilegeMap, loadMappings } from "./src/utils/mappings";
+import { PrivilegeMap, getGroupPrivilege, getUserCustomMembership, loadMappings } from "./src/utils/mappings";
 import { Slack } from './src/utils/slack';
 
 
 const GOOGLE_GROUP_FILTER = process.env.GOOGLE_GROUP_FILTER || "*";
 const DEFAULT_MEMBERSHIP_ROLE: GitlabRole = GitlabRoleMapping[process.env.DEFAULT_MEMBERSHIP_ROLE || 'Minimal Access']
-const DRY_RUN = (process.env.DRY_RUN || "0") !== "0"
+const DRY_RUN = (process.env.DRY_RUN || "false") !== "false"
 const GITLAB_GROUP = process.env.GITLAB_GROUP!
 
 const google = new Google()
 await google.initialize()
 const gitlabScim = new GitlabScim()
 const gitlabApi = new GitlabApi()
-const slack = new Slack()
+let slack: Slack | null = null;
+
+if (process.env.SLACK_WEBHOOK_URL !== undefined) {
+  slack = new Slack()
+}
 
 
 async function getGoogleUserGroups(): Promise<{ [key: string]: string[] }> {
@@ -44,30 +48,6 @@ async function getGoogleUserGroups(): Promise<{ [key: string]: string[] }> {
   return userGroups
 }
 
-function getUserCustomMembership(email: string, groups: string[], mappings: PrivilegeMap): { [key: string]: GitlabRole } {
-  logger.debug(`retrieve membership of user ${email}`)
-
-  const membership: { [key: string]: GitlabRole } = {}
-
-  if (mappings.users.hasOwnProperty(email)) {
-    for (var gitlabGroup of Object.keys(mappings.users[email])) {
-      membership[gitlabGroup] = GitlabRoleMapping[mappings.users[email][gitlabGroup]]
-    }
-  } else {
-    for (const userGroup of groups) {
-      if (mappings.groups[userGroup] !== undefined) {
-        for (var gitlabGroup of Object.keys(mappings.groups[userGroup])) {
-          if (!membership.hasOwnProperty(gitlabGroup)) {
-            membership[gitlabGroup] = GitlabRoleMapping[mappings.groups[userGroup][gitlabGroup]]
-          }
-        }
-        break
-      }
-    }
-  }
-
-  return membership
-}
 
 async function execute() {
   const mappings = await loadMappings()
@@ -78,75 +58,85 @@ async function execute() {
   const googleUsers = await google.listUsers(Object.keys(userGroups))
   const gitlabScimUsers = await gitlabScim.listScimUsers()
   const gitlabUsers = await gitlabApi.listGroupSamlMembers()
-
   // Compute updates to execute
 
   const membershipUpdates: GitlabAccessUpdate[] = []
   const userUpdates: GitlabUserUpdate[] = []
+  const leftOverUsers = Object.keys(gitlabScimUsers)
 
   // check which users need to be added
   for (const email of Object.keys(userGroups)) {
     if (Object.keys(gitlabScimUsers).includes(email)) {
-      continue
-    }
-    // if a google user is not a scim user, add it and its custom memberships
+      if (gitlabScimUsers[email].active) { // user is active, we'll compare
+        continue
+      }
 
-    userUpdates.push({
-      user: googleUsers[email],
-      op: GitlabUserUpdateOperation.ADD
-    })
+      userUpdates.push({
+        user: gitlabScimUsers[email],
+        op: GitlabUserUpdateOperation.ACTIVATE,
+        notes: email
+      })
+    } else {
+      // if a google user is not a scim user, add it and its custom memberships
+
+      userUpdates.push({
+        user: googleUsers[email],
+        op: GitlabUserUpdateOperation.ADD,
+        notes: email,
+      })
+    }
 
     const membership = getUserCustomMembership(email, userGroups[email], mappings)
+    if (membership[GITLAB_GROUP] === undefined) {
+      membershipUpdates.push({
+        user: email,
+        group: GITLAB_GROUP,
+        role: getGroupPrivilege(DEFAULT_MEMBERSHIP_ROLE, GITLAB_GROUP, membership),
+        op: GitlabAccessUpdateOperation.ADD,
+        notes: email,
+      })
+    }
     for (const key of Object.keys(membership)) {
       membershipUpdates.push({
         user: email,
         group: key,
         role: membership[key],
-        op: GitlabAccessUpdateOperation.ADD
+        op: GitlabAccessUpdateOperation.ADD,
+        notes: email,
       })
     }
+
+    leftOverUsers.splice(leftOverUsers.indexOf(email), 1)
   }
 
+
   // check which users need to be removed or activate
-  for (const email of Object.keys(gitlabScimUsers)) {
-    if (!Object.keys(googleUsers).includes(email) && gitlabScimUsers[email].active) { // user does not exist in google and is active in gitlab: remove
-      userUpdates.push({
-        user: gitlabScimUsers[email],
-        op: GitlabUserUpdateOperation.REMOVE
-      })
+  for (const email of leftOverUsers) {
+    if (!gitlabScimUsers[email].active) {
       continue
-    } else if (
-      Object.keys(googleUsers).includes(email) &&
-      googleUsers[email].suspended != !gitlabScimUsers[email].active
-    ) { // user exists in both gitlab and google and their status differ
-      if (googleUsers[email].suspended) { // google user is suspended but gitlab user is active: remove
-        userUpdates.push({
-          user: gitlabScimUsers[email],
-          op: GitlabUserUpdateOperation.REMOVE
-        })
-        continue
-      } else if (!googleUsers[email].suspended) { // google user is active but gitlab user is inactive: activate
-        userUpdates.push({
-          user: gitlabScimUsers[email],
-          op: GitlabUserUpdateOperation.ACTIVATE
-        })
-      }
     }
 
-    // will only reach here if the user is either to be activated or active in both google and gitlab
+    // user does not exist in google, or is suspended in google, and is active in gitlab: remove
+    if (!Object.keys(googleUsers).includes(email) || googleUsers[email].suspended) {
+      userUpdates.push({
+        user: gitlabScimUsers[email],
+        op: GitlabUserUpdateOperation.REMOVE,
+        notes: email,
+      })
+      continue
+    }
 
     const expectedMembership = getUserCustomMembership(email, userGroups[email], mappings)
     const currentMembership = await gitlabApi.listUserMembership(gitlabUsers[email].id)
 
-
     if (currentMembership.length === 0 && Object.keys(expectedMembership).length > 0) {
-      expectedMembership
       for (const key of Object.keys(expectedMembership)) {
         membershipUpdates.push({
           user: email,
           group: key,
           role: expectedMembership[key],
-          op: GitlabAccessUpdateOperation.ADD
+          op: GitlabAccessUpdateOperation.ADD,
+          notes: email,
         })
       }
       continue
@@ -154,12 +144,15 @@ async function execute() {
 
     for (const item of currentMembership) {
       if (expectedMembership[item.source_full_name] === undefined) {
-        if (item.access_level.integer_value !== DEFAULT_MEMBERSHIP_ROLE) {
+        const userDefaultMembership = getGroupPrivilege(DEFAULT_MEMBERSHIP_ROLE, item.source_full_name, expectedMembership)
+
+        if (item.access_level.integer_value !== userDefaultMembership) {
           membershipUpdates.push({
             user: gitlabUsers[email].id,
             group: item.source_full_name,
-            role: DEFAULT_MEMBERSHIP_ROLE,
-            op: shouldDelete(item.source_full_name, DEFAULT_MEMBERSHIP_ROLE)
+            role: userDefaultMembership,
+            op: shouldDelete(item.source_full_name, userDefaultMembership),
+            notes: email,
           })
         }
       } else if (expectedMembership[item.source_full_name] !== item.access_level.integer_value) {
@@ -167,17 +160,30 @@ async function execute() {
           user: gitlabUsers[email].id,
           group: item.source_full_name,
           role: expectedMembership[item.source_full_name],
-          op: shouldDelete(item.source_full_name, expectedMembership[item.source_full_name])
+          op: shouldDelete(item.source_full_name, expectedMembership[item.source_full_name]),
+          notes: email,
         })
       }
     }
   }
 
   logger.info(`User updates:`)
-  logger.info(JSON.stringify(membershipUpdates))
+  userUpdates.forEach(update => {
+    console.log(JSON.stringify({
+      op: update.op,
+      notes: update.notes,
+    }))
+  })
 
   logger.info(`Membership updates:`)
-  logger.info(JSON.stringify(membershipUpdates))
+  membershipUpdates.forEach(update => {
+    console.log(JSON.stringify({
+      notes: update.notes,
+      op: update.op,
+      role: update.role,
+      group: update.group,
+    }))
+  })
 
   if (DRY_RUN) {
     logger.info("Dry run is on, not committing any change")
@@ -191,12 +197,12 @@ async function execute() {
   }
 
   for (const update of membershipUpdates) {
-    logger.debug(`changing ${update.user} access for group ${update.group} to ${update.role}`)
+    logger.debug(`changing ${update.notes} access for group ${update.group} to ${update.role}`)
 
     await gitlabApi.changeUserAccessLevel(update)
   }
 
-  if (slack.active()) {
+  if (slack !== null) {
     slack.notify(userUpdates, membershipUpdates)
   }
 }

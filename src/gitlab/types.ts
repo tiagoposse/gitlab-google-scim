@@ -21,13 +21,13 @@ export type GitlabScimUser = {
 
 export type GitlabApiUser = {
   id: string
+  username: string,
   state: string,
-  email: string | undefined
   group_saml_identity: {
     extern_uid: string
     provider: string
     saml_provider_id: number
-  } | undefined
+  } | null
 }
 
 export type GitlabGroup = {
@@ -75,6 +75,7 @@ export type GitlabAccessUpdate = {
   group: string
   role: GitlabRole
   op: GitlabAccessUpdateOperation
+  notes: string
 }
 
 export enum GitlabUserUpdateOperation {
@@ -86,4 +87,5 @@ export enum GitlabUserUpdateOperation {
 export type GitlabUserUpdate = {
   user: GoogleUser | GitlabScimUser
   op: GitlabUserUpdateOperation
+  notes?: string
 }
