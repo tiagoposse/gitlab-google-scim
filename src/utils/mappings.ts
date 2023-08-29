@@ -2,6 +2,7 @@ import { GitlabRole, GitlabRoleMapping } from '../gitlab/types';
 import { load } from "js-yaml";
 import { getSecretFromAws } from './aws';
 import { logger } from './logging';
+import fs from 'fs';
 
 async function resolveMappings(): Promise<string> {
   if (process.env.ROLE_MAPPINGS_SECRET !== undefined) {
@@ -9,11 +10,10 @@ async function resolveMappings(): Promise<string> {
   }
 
   if (process.env.ROLE_MAPPINGS_FILE !== undefined) {
-    const f = Bun.file(process.env.ROLE_MAPPINGS_FILE)
-    if (!f.exists()) {
+    if (fs.existsSync(process.env.ROLE_MAPPINGS_FILE)) {
       throw Error(`Role mappings file does not exist: ${process.env.ROLE_MAPPINGS_FILE}`)
     }
-    return await f.text()
+    return (fs.readFileSync(process.env.ROLE_MAPPINGS_FILE)).toString()
   }
 
   if (process.env.ROLE_MAPPINGS !== undefined) {

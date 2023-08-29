@@ -1,3 +1,10 @@
+import { logger } from "../utils/logging"
+import fetch, {
+  Headers,
+  Request,
+  RequestInit,
+  Response,
+} from 'node-fetch'
 
 export abstract class Gitlab {
   url: string
@@ -14,14 +21,14 @@ export abstract class Gitlab {
     this.headers = {}
   }
 
-  async request(config: { url: string, body?: any, headers?: { [key: string]: string }, method?: string }, accepted?: number[]): Promise<any> {
+  async request(url: string, config: RequestInit, accepted?: number[]): Promise<any> {
     if (accepted === undefined) {
       accepted = [201, 204, 200]
     }
-    return await (await this.rawRequest(config, accepted)).json()
+    return await (await this.rawRequest(url, config, accepted)).json()
   }
 
-  async rawRequest(config: { url: string, body?: any, headers?: { [key: string]: string }, method?: string }, accepted?: number[]): Promise<Response> {
+  async rawRequest(url: string, config: RequestInit, accepted?: number[]): Promise<Response> {
     if (accepted === undefined) {
       accepted = [201, 204, 200]
     }
@@ -34,25 +41,23 @@ export abstract class Gitlab {
     }
 
     config.headers = { ...this.headers, ...config.headers }
-    if (config.body !== undefined) {
-      if (config.headers["Content-Type"] === "application/x-www-form-urlencoded") {
-        let formBody = []
-        for (const k of Object.keys(config.body)) {
-          formBody.push(`${k}=${config.body[k]}`)
-        }
-        config.body = formBody.join("&")
-      } else {
-        config.body = JSON.stringify(config.body)
-      }
-    }
+    // if (config.body !== undefined) {
+    //   if ((config.headers as Headers).get("Content-Type") === "application/x-www-form-urlencoded") {
+    //     let formBody = []
+    //     for (const k of Object.keys(config.body)) {
+    //       formBody.push(`${k}=${config.body[k]}`)
+    //     }
+    //     config.body = formBody.join("&")
+    //   } else {
+    //     config.body = JSON.stringify(config.body)
+    //   }
+    // }
 
-    config.url = `${this.url}${config.url}`
-
-    const req = new Request(config)
+    const req = new Request(`${this.url}${url}`, config)
     const resp = await fetch(req)
 
     if (!accepted.includes(resp.status)) {
-      throw Error(`Could not execute gitlab request ${config.method} to ${config.url} (${resp.status}): ${resp.statusText}`)
+      throw Error(`Could not execute gitlab request ${config.method} to ${this.url}${url} (${resp.status}): ${resp.statusText}`)
     }
 
     return resp
