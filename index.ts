@@ -21,10 +21,12 @@ const gitlabScim = new GitlabScim()
 const gitlabApi = new GitlabApi()
 let slack: Slack | null = null;
 
+
 if (process.env.SLACK_WEBHOOK_URL !== undefined) {
   slack = new Slack()
 }
 
+logger.debug("clients initialized")
 
 async function getGoogleUserGroups(): Promise<{ [key: string]: string[] }> {
   const userGroups: { [key: string]: string[] } = {}
@@ -34,7 +36,7 @@ async function getGoogleUserGroups(): Promise<{ [key: string]: string[] }> {
 
   const googleGroups = await google.listGroups(groupFilter)
   for (const group of googleGroups) {
-    logger.debug(`listing google groups for ${group.email}`)
+    logger.debug(`listing members for google group ${group.email}`)
     const members = await google.listGroupMembers(group.id)
     for (const member of members) {
       if (!userGroups.hasOwnProperty(member.email)) {
@@ -56,8 +58,11 @@ async function execute() {
 
   const userGroups: { [key: string]: string[] } = await getGoogleUserGroups()
   const googleUsers = await google.listUsers(Object.keys(userGroups))
+  logger.debug("retrieved google users")
   const gitlabScimUsers = await gitlabScim.listScimUsers()
+  logger.debug("retrieved gitlab scim users")
   const gitlabUsers = await gitlabApi.listGroupSamlMembers()
+  logger.debug("retrieved gitlab group users")
   // Compute updates to execute
 
   const membershipUpdates: GitlabAccessUpdate[] = []
@@ -221,7 +226,9 @@ if (
 }
 
 export const handler: Handler = async () => {
+  logger.debug("Starting execution")
   await execute()
+  logger.debug("Finished execution")
 
   return {}
 };

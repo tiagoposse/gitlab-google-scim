@@ -8,7 +8,6 @@ import fs from 'fs';
 const GITLAB_SCIM_TOKEN = await resolveGitlabScimToken()
 
 async function resolveGitlabScimToken(): Promise<string> {
-
   if (process.env.GITLAB_SCIM_TOKEN_SECRET !== undefined) {
     return await getSecretFromAws(process.env.GITLAB_SCIM_TOKEN_SECRET)
   }

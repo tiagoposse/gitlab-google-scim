@@ -1,11 +1,11 @@
 {
   "name": "gitlab-google-scim",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "main": "index.ts",
   "type": "module",
   "scripts": {
     "compile": "rm -rf build/ && ./node_modules/typescript/bin/tsc -p . --noEmit false --allowImportingTsExtensions false",
-    "package": "rm build.zip && zip -r build.zip package.json build node_modules",
+    "package": "rm -rf lambda.zip && zip -r lambda.zip package.json build node_modules",
     "lambda": "npm run compile && npm run package"
   },
   "devDependencies": {

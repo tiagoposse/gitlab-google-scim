@@ -2,6 +2,7 @@ import { GitlabGroup, GitlabApiUser, GitlabAccessUpdate, GitlabMembership, Gitla
 import { Gitlab } from './index';
 import { getSecretFromAws } from "../utils/aws";
 import fs from 'fs';
+import { logger } from "../utils/logging";
 
 const GITLAB_API_TOKEN = await resolveGitlabApiToken()
 
@@ -78,7 +79,7 @@ export class GitlabApi extends Gitlab {
 
     while (page !== -1) {
       const resp = await this.rawRequest(`/${groupName}/members?page=${page}`, {})
-      if (resp.headers.get("x-next-page") !== null) {
+      if (resp.headers.get("x-next-page") !== null && resp.headers.get("x-next-page") !== undefined && resp.headers.get("x-next-page") !== "") {
         page = +resp.headers.get("x-next-page")!
       } else {
         page = -1
