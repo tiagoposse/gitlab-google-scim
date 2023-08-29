@@ -6,7 +6,7 @@ import { GitlabScim } from './src/gitlab/scim';
 import { GitlabApi } from './src/gitlab/api';
 import { Google } from './src/google';
 import { logger } from "./src/utils/logging";
-import { PrivilegeMap, getGroupPrivilege, getUserCustomMembership, loadMappings } from "./src/utils/mappings";
+import { getGroupPrivilege, getUserCustomMembership, loadMappings } from "./src/utils/mappings";
 import { Slack } from './src/utils/slack';
 
 
@@ -96,6 +96,7 @@ async function execute() {
         notes: email,
       })
     }
+
     for (const key of Object.keys(membership)) {
       membershipUpdates.push({
         user: email,
@@ -224,5 +225,3 @@ export const handler: Handler = async () => {
 
   return {}
 };
-
-export default handler;

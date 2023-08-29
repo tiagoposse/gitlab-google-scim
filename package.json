@@ -1,16 +1,18 @@
 {
   "name": "gitlab-google-scim",
-  "module": "index.ts",
+  "version": "0.1.2",
+  "main": "index.ts",
   "type": "module",
   "scripts": {
-    "compile": "rm -rf build/ && tsc -p ."
+    "compile": "rm -rf build/ && ./node_modules/typescript/bin/tsc -p . --noEmit false --allowImportingTsExtensions false",
+    "package": "rm build.zip && zip -r build.zip package.json build node_modules",
+    "lambda": "npm run compile && npm run package"
   },
   "devDependencies": {
-    "bun-types": "latest"
-  },
-  "peerDependencies": {
+    "bun-types": "latest",
     "typescript": "^5.0.0"
   },
+
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.395.0",
     "@slack/webhook": "^6.1.0",
@@ -19,6 +21,7 @@
     "google-auth-library": "^9.0.0",
     "js-yaml": "^4.1.0",
     "minimatch": "^9.0.3",
+    "node-fetch": "^3.3.2",
     "winston": "3"
   }
 }

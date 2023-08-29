@@ -3,6 +3,7 @@ import { GoogleAuth } from 'google-auth-library';
 import { GoogleUser, GoogleGroupMember, GoogleGroupsListResponse, GoogleUsersListResponse, GoogleGroup, GoogleGroupMembersListResponse } from './types';
 import { minimatch } from 'minimatch';
 import { getSecretFromAws } from "../utils/aws";
+import fs from 'fs';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/admin.directory.user.readonly',
@@ -17,18 +18,17 @@ const GOOGLE_TARGET_SA_FILE = GOOGLE_SA_KEY_FILE || "/tmp/service_account.json"
 async function resolveGoogleServiceAcccount() {
   if (process.env.GOOGLE_SA_KEY_SECRET !== undefined) {
     const secret = await getSecretFromAws(process.env.GOOGLE_SA_KEY_SECRET)
-    await Bun.write(GOOGLE_TARGET_SA_FILE, secret)
+    fs.writeFileSync(GOOGLE_TARGET_SA_FILE, secret)
     return
   }
 
   if (process.env.GOOGLE_SA_KEY !== undefined) {
-    await Bun.write(GOOGLE_TARGET_SA_FILE, process.env.GOOGLE_SA_KEY)
+    fs.writeFileSync(GOOGLE_TARGET_SA_FILE, process.env.GOOGLE_SA_KEY)
     return
   }
 
   if (process.env.GOOGLE_SA_KEY_FILE !== undefined) {
-    const f = Bun.file(process.env.GOOGLE_SA_KEY_FILE)
-    if (!f.exists()) {
+    if (fs.existsSync(process.env.GOOGLE_SA_KEY_FILE)) {
       throw Error(`Google service account file does not exist: ${process.env.GOOGLE_SA_KEY_FILE}`)
     }
     return

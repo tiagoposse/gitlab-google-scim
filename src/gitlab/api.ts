@@ -1,6 +1,7 @@
 import { GitlabGroup, GitlabApiUser, GitlabAccessUpdate, GitlabMembership, GitlabAccessUpdateOperation } from "./types"
 import { Gitlab } from './index';
 import { getSecretFromAws } from "../utils/aws";
+import fs from 'fs';
 
 const GITLAB_API_TOKEN = await resolveGitlabApiToken()
 
@@ -10,12 +11,10 @@ async function resolveGitlabApiToken(): Promise<string> {
   }
 
   if (process.env.GITLAB_API_TOKEN_FILE !== undefined) {
-    const f = Bun.file(process.env.GITLAB_API_TOKEN_FILE)
-
-    if (!f.exists()) {
+    if (fs.existsSync(process.env.GITLAB_API_TOKEN_FILE)) {
       throw Error(`Gitlab API token file does not exist: ${process.env.GITLAB_API_TOKEN_FILE}`)
     }
-    return await f.text()
+    return (fs.readFileSync(process.env.GITLAB_API_TOKEN_FILE)).toString()
   }
 
   if (process.env.GITLAB_API_TOKEN !== undefined) {
@@ -38,9 +37,7 @@ export class GitlabApi extends Gitlab {
   }
 
   async listUserMembership(userId: string): Promise<GitlabMembership[]> {
-    let membership = await this.request({
-      url: `/${this.group}/billable_members/${userId}/memberships`
-    }, [200, 404]) as GitlabMembership[]
+    let membership = await this.request(`/${this.group}/billable_members/${userId}/memberships`, {}, [200, 404]) as GitlabMembership[]
 
     if (Array.isArray(membership)) {
       membership.forEach(value => { value.source_full_name = value.source_full_name.replaceAll(" ", ""); return value })
@@ -56,9 +53,7 @@ export class GitlabApi extends Gitlab {
     var groups: GitlabGroup[] = []
 
     while (page !== -1) {
-      const resp = await this.rawRequest({
-        url: `?all_available=true&page=${page}`
-      })
+      const resp = await this.rawRequest(`?all_available=true&page=${page}`, {})
       if (resp.headers.get("x-next-page") !== null) {
         page = +resp.headers.get("x-next-page")!
       } else {
@@ -82,9 +77,7 @@ export class GitlabApi extends Gitlab {
     }
 
     while (page !== -1) {
-      const resp = await this.rawRequest({
-        url: `/${groupName}/members?page=${page}`
-      })
+      const resp = await this.rawRequest(`/${groupName}/members?page=${page}`, {})
       if (resp.headers.get("x-next-page") !== null) {
         page = +resp.headers.get("x-next-page")!
       } else {
@@ -96,7 +89,7 @@ export class GitlabApi extends Gitlab {
           continue
         }
 
-        if (user.group_saml_identity !== null) {
+        if (user.group_saml_identity !== null && user.group_saml_identity !== undefined) {
           users[user.group_saml_identity.extern_uid] = user
         }
       }
@@ -108,27 +101,24 @@ export class GitlabApi extends Gitlab {
   async changeUserAccessLevel(change: GitlabAccessUpdate) {
     switch (change.op) {
       case GitlabAccessUpdateOperation.ADD:
-        await this.rawRequest({
-          url: `/${change.group.replace("/", "%2F")}/invitations`,
+        await this.rawRequest(`/${change.group.replace("/", "%2F")}/invitations`, {
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded"
           },
-          body: {
+          body: JSON.stringify({
             email: change.user,
             access_level: change.role
-          }
+          })
         })
         break;
       case GitlabAccessUpdateOperation.REMOVE:
-        await this.rawRequest({
-          url: `/${change.group.replace("/", "%2F")}/members/${change.user}`,
+        await this.rawRequest(`/${change.group.replace("/", "%2F")}/members/${change.user}`, {
           method: "DELETE"
         })
         break;
       case GitlabAccessUpdateOperation.UPDATE:
-        await this.rawRequest({
-          url: `/${change.group.replace("/", "%2F")}/members/${change.user}?access_level=${change.role}`,
+        await this.rawRequest(`/${change.group.replace("/", "%2F")}/members/${change.user}?access_level=${change.role}`, {
           method: "PUT"
         })
         break;

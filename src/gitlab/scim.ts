@@ -3,6 +3,7 @@ import { GitlabScimUser, GitlabScimUsersListResponse, GitlabUserUpdate, GitlabUs
 import { Gitlab } from './index';
 import { getSecretFromAws } from "../utils/aws";
 import { logger } from "../utils/logging";
+import fs from 'fs';
 
 const GITLAB_SCIM_TOKEN = await resolveGitlabScimToken()
 
@@ -13,12 +14,10 @@ async function resolveGitlabScimToken(): Promise<string> {
   }
 
   if (process.env.GITLAB_SCIM_TOKEN_FILE !== undefined) {
-    const f = Bun.file(process.env.GITLAB_SCIM_TOKEN_FILE)
-
-    if (!f.exists()) {
+    if (fs.existsSync(process.env.GITLAB_SCIM_TOKEN_FILE)) {
       throw Error(`Gitlab SCIM token file does not exist: ${process.env.GITLAB_SCIM_TOKEN_FILE}`)
     }
-    return await f.text()
+    return (fs.readFileSync(process.env.GITLAB_SCIM_TOKEN_FILE)).toString()
   }
 
   if (process.env.GITLAB_SCIM_TOKEN !== undefined) {
@@ -42,10 +41,9 @@ export class GitlabScim extends Gitlab {
   }
 
   async createUser(user: GoogleUser) {
-    console.log(await this.request({
-      url: "/",
+    console.log(await this.request("/", {
       method: "POST",
-      body: {
+      body: JSON.stringify({
         externalId: user.primaryEmail,
         userName: `${user.name.givenName[0]}${user.name.familyName}`,
         active: null,
@@ -63,16 +61,16 @@ export class GitlabScim extends Gitlab {
             primary: true
           }
         ]
-      }
+      })
     }))
   }
 
   async activateUser(user: GitlabScimUser) {
     this.request(
+      `/${user.id}`,
       {
-        url: `/${user.id}`,
         method: 'PATCH',
-        body: {
+        body: JSON.stringify({
           Operations: [
             {
               op: "Update",
@@ -80,15 +78,15 @@ export class GitlabScim extends Gitlab {
               value: true
             }
           ]
-        }
+        })
       }
     )
   }
 
   async removeScimUser(user: GitlabScimUser) {
     this.request(
+      `/${user.id}`,
       {
-        url: `/${user.id}`,
         method: 'DELETE'
       }
     )
@@ -99,7 +97,7 @@ export class GitlabScim extends Gitlab {
 
     var startIndex = 1
     while (startIndex > -1) {
-      const resp = await this.request({ url: "" }) as GitlabScimUsersListResponse
+      const resp = await this.request("", {}) as GitlabScimUsersListResponse
 
       for (var u of resp.Resources) {
         for (const email of u.emails) {
