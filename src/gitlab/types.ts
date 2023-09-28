@@ -89,3 +89,8 @@ export type GitlabUserUpdate = {
   op: GitlabUserUpdateOperation
   notes?: string
 }
+
+export enum GitlabPathType {
+  GROUP = "group",
+  PROJECT = "project"
+}

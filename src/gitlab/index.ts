@@ -26,7 +26,7 @@ export abstract class Gitlab {
     return await (await this.rawRequest(url, config, accepted)).json()
   }
 
-  async rawRequest(url: string, config: RequestInit, accepted?: number[]): Promise<Response> {
+  async rawRequest(suffix: string, config: RequestInit, accepted?: number[]): Promise<Response> {
     if (accepted === undefined) {
       accepted = [201, 204, 200]
     }
@@ -40,13 +40,20 @@ export abstract class Gitlab {
 
     config.headers = { ...this.headers, ...config.headers }
 
-    const req = new Request(`${this.url}${url}`, config)
+    const req = new Request(`${this.url}${suffix}`, config)
     const resp = await fetch(req)
 
     if (!accepted.includes(resp.status)) {
-      throw Error(`Could not execute gitlab request ${config.method} to ${this.url}${url} (${resp.status}): ${resp.statusText}`)
+      const message = `Could not execute gitlab request ${config.method} to ${this.url}${suffix} (${resp.status}): ${resp.statusText}`
+      if (resp.status === 404) {
+        throw new NotFoundError(message)
+      } else {
+        throw Error(message)
+      }
     }
 
     return resp
   }
 }
+
+export class NotFoundError extends Error { }

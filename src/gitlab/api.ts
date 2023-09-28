@@ -1,8 +1,8 @@
-import { GitlabGroup, GitlabApiUser, GitlabAccessUpdate, GitlabMembership, GitlabAccessUpdateOperation } from "./types"
-import { Gitlab } from './index';
+import { GitlabGroup, GitlabApiUser, GitlabAccessUpdate, GitlabMembership, GitlabAccessUpdateOperation, GitlabPathType } from "./types"
+import { Gitlab, NotFoundError } from './index';
 import { getSecretFromAws } from "../utils/aws";
+import { FormData } from "node-fetch";
 import fs from 'fs';
-import { logger } from "../utils/logging";
 
 const GITLAB_API_TOKEN = await resolveGitlabApiToken()
 
@@ -25,20 +25,24 @@ async function resolveGitlabApiToken(): Promise<string> {
   throw Error("gitlab api token was not provided.")
 }
 
+
+
 export class GitlabApi extends Gitlab {
   headers: { "PRIVATE-TOKEN": string }
+  groupOrProjects: { [key: string]: GitlabPathType }
 
   constructor() {
     super()
 
-    this.url = `${this.url}/v4/groups`
+    this.url = `${this.url}/v4`
     this.headers = {
       "PRIVATE-TOKEN": GITLAB_API_TOKEN,
     }
+    this.groupOrProjects = {}
   }
 
   async listUserMembership(userId: string): Promise<GitlabMembership[]> {
-    let membership = await this.request(`/${this.group}/billable_members/${userId}/memberships`, {}, [200, 404]) as GitlabMembership[]
+    let membership = await this.request(`/groups/${this.group}/billable_members/${userId}/memberships`, {}, [200, 404]) as GitlabMembership[]
 
     if (Array.isArray(membership)) {
       membership.forEach(value => { value.source_full_name = value.source_full_name.replaceAll(" ", ""); return value })
@@ -78,7 +82,7 @@ export class GitlabApi extends Gitlab {
     }
 
     while (page !== -1) {
-      const resp = await this.rawRequest(`/${groupName}/members?page=${page}`, {})
+      const resp = await this.rawRequest(`/groups/${groupName}/members?page=${page}`, {})
       if (resp.headers.get("x-next-page") !== null && resp.headers.get("x-next-page") !== undefined && resp.headers.get("x-next-page") !== "") {
         page = +resp.headers.get("x-next-page")!
       } else {
@@ -100,26 +104,48 @@ export class GitlabApi extends Gitlab {
   }
 
   async changeUserAccessLevel(change: GitlabAccessUpdate) {
+    if (this.groupOrProjects[change.group] === undefined) {
+      try {
+        await this.rawRequest(`/groups/${change.group.replaceAll("/", "%2F")}`, {})
+        this.groupOrProjects[change.group] = GitlabPathType.GROUP
+      } catch (e) {
+        if (e instanceof NotFoundError) {
+          this.groupOrProjects[change.group] = GitlabPathType.PROJECT
+        } else {
+          throw e
+        }
+      }
+    }
+
+    let pathPrefix = ""
+    switch (this.groupOrProjects[change.group]) {
+      case GitlabPathType.PROJECT:
+        pathPrefix = "projects"
+        break;
+      case GitlabPathType.GROUP:
+        pathPrefix = "groups"
+        break;
+    }
+
+    console.log(`/${pathPrefix}/${change.group.replaceAll("/", "%2F")}/invitations`)
     switch (change.op) {
       case GitlabAccessUpdateOperation.ADD:
-        await this.rawRequest(`/${change.group.replace("/", "%2F")}/invitations`, {
+        const form = new FormData();
+        form.set("email", change.user)
+        form.set("access_level", change.role.toString())
+
+        await this.rawRequest(`/${pathPrefix}/${change.group.replaceAll("/", "%2F")}/invitations`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-          },
-          body: JSON.stringify({
-            email: change.user,
-            access_level: change.role
-          })
+          body: form
         })
         break;
       case GitlabAccessUpdateOperation.REMOVE:
-        await this.rawRequest(`/${change.group.replace("/", "%2F")}/members/${change.user}`, {
+        await this.rawRequest(`/${pathPrefix}/${change.group.replaceAll("/", "%2F")}/members/${change.user}`, {
           method: "DELETE"
         })
         break;
       case GitlabAccessUpdateOperation.UPDATE:
-        await this.rawRequest(`/${change.group.replace("/", "%2F")}/members/${change.user}?access_level=${change.role}`, {
+        await this.rawRequest(`/${pathPrefix}/${change.group.replaceAll("/", "%2F")}/members/${change.user}?access_level=${change.role}`, {
           method: "PUT"
         })
         break;
