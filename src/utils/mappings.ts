@@ -10,7 +10,7 @@ async function resolveMappings(): Promise<string> {
   }
 
   if (process.env.ROLE_MAPPINGS_FILE !== undefined) {
-    if (fs.existsSync(process.env.ROLE_MAPPINGS_FILE)) {
+    if (!fs.existsSync(process.env.ROLE_MAPPINGS_FILE)) {
       throw Error(`Role mappings file does not exist: ${process.env.ROLE_MAPPINGS_FILE}`)
     }
     return (fs.readFileSync(process.env.ROLE_MAPPINGS_FILE)).toString()

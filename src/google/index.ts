@@ -29,7 +29,7 @@ async function resolveGoogleServiceAcccount() {
   }
 
   if (process.env.GOOGLE_SA_KEY_FILE !== undefined) {
-    if (fs.existsSync(process.env.GOOGLE_SA_KEY_FILE)) {
+    if (!fs.existsSync(process.env.GOOGLE_SA_KEY_FILE)) {
       throw Error(`Google service account file does not exist: ${process.env.GOOGLE_SA_KEY_FILE}`)
     }
     return

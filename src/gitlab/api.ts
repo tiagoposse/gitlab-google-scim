@@ -12,7 +12,7 @@ async function resolveGitlabApiToken(): Promise<string> {
   }
 
   if (process.env.GITLAB_API_TOKEN_FILE !== undefined) {
-    if (fs.existsSync(process.env.GITLAB_API_TOKEN_FILE)) {
+    if (!fs.existsSync(process.env.GITLAB_API_TOKEN_FILE)) {
       throw Error(`Gitlab API token file does not exist: ${process.env.GITLAB_API_TOKEN_FILE}`)
     }
     return (fs.readFileSync(process.env.GITLAB_API_TOKEN_FILE)).toString()
