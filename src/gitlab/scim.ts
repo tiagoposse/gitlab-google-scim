@@ -16,7 +16,7 @@ async function resolveGitlabScimToken(): Promise<string> {
     if (!fs.existsSync(process.env.GITLAB_SCIM_TOKEN_FILE)) {
       throw Error(`Gitlab SCIM token file does not exist: ${process.env.GITLAB_SCIM_TOKEN_FILE}`)
     }
-    return (fs.readFileSync(process.env.GITLAB_SCIM_TOKEN_FILE)).toString()
+    return (fs.readFileSync(process.env.GITLAB_SCIM_TOKEN_FILE)).toString().trim()
   }
 
   if (process.env.GITLAB_SCIM_TOKEN !== undefined) {

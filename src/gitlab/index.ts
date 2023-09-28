@@ -1,6 +1,4 @@
-import { logger } from "../utils/logging"
 import fetch, {
-  Headers,
   Request,
   RequestInit,
   Response,
@@ -41,17 +39,6 @@ export abstract class Gitlab {
     }
 
     config.headers = { ...this.headers, ...config.headers }
-    // if (config.body !== undefined) {
-    //   if ((config.headers as Headers).get("Content-Type") === "application/x-www-form-urlencoded") {
-    //     let formBody = []
-    //     for (const k of Object.keys(config.body)) {
-    //       formBody.push(`${k}=${config.body[k]}`)
-    //     }
-    //     config.body = formBody.join("&")
-    //   } else {
-    //     config.body = JSON.stringify(config.body)
-    //   }
-    // }
 
     const req = new Request(`${this.url}${url}`, config)
     const resp = await fetch(req)

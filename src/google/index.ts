@@ -4,7 +4,6 @@ import { GoogleUser, GoogleGroupMember, GoogleGroupsListResponse, GoogleUsersLis
 import { minimatch } from 'minimatch';
 import { getSecretFromAws } from "../utils/aws";
 import fs from 'fs';
-import { logger } from '../utils/logging';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/admin.directory.user.readonly',
