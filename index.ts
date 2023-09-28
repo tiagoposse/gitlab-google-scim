@@ -115,7 +115,6 @@ async function execute() {
     leftOverUsers.splice(leftOverUsers.indexOf(email), 1)
   }
 
-
   // check which users need to be removed or activate
   for (const email of leftOverUsers) {
     if (!gitlabScimUsers[email].active) {
@@ -148,6 +147,7 @@ async function execute() {
       continue
     }
 
+    const leftOverMembership = Object.assign({}, expectedMembership);
     for (const item of currentMembership) {
       if (expectedMembership[item.source_full_name] === undefined) {
         const userDefaultMembership = getGroupPrivilege(DEFAULT_MEMBERSHIP_ROLE, item.source_full_name, expectedMembership)
@@ -161,15 +161,28 @@ async function execute() {
             notes: email,
           })
         }
-      } else if (expectedMembership[item.source_full_name] !== item.access_level.integer_value) {
-        membershipUpdates.push({
-          user: gitlabUsers[email].id,
-          group: item.source_full_name,
-          role: expectedMembership[item.source_full_name],
-          op: shouldDelete(item.source_full_name, expectedMembership[item.source_full_name]),
-          notes: email,
-        })
+      } else {
+        delete leftOverMembership[item.source_full_name]
+        if (expectedMembership[item.source_full_name] !== item.access_level.integer_value) {
+          membershipUpdates.push({
+            user: gitlabUsers[email].id,
+            group: item.source_full_name,
+            role: expectedMembership[item.source_full_name],
+            op: shouldDelete(item.source_full_name, expectedMembership[item.source_full_name]),
+            notes: email,
+          })
+        }
       }
+    }
+
+    for (const key of Object.keys(leftOverMembership)) {
+      membershipUpdates.push({
+        user: email,
+        group: key,
+        role: leftOverMembership[key],
+        op: GitlabAccessUpdateOperation.ADD,
+        notes: email,
+      })
     }
   }
 
